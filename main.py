@@ -39,7 +39,7 @@ def segment(input_point,input_label):
     return mask
 
 def show_mask(mask, ax):
-    color = np.array([128 / 255, 128 / 255, 128 / 255, 0.4])
+    color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
@@ -74,19 +74,26 @@ if __name__ == '__main__':
                 if data == "PositiveDot":
                     dot = connection.recv(1024).decode()
                     coords = dot.split(" ")
+                    coords[0] = float(coords[0])
+                    coords[1] = float(coords[1])
                     input_points.append(coords)
                     input_labels.append(1)
+                    print(coords)
                 if data == "NegativeDot":
                     dot = connection.recv(1024).decode()
                     coords = dot.split(" ")
+                    coords[0] = float(coords[0])
+                    coords[1] = float(coords[1])
                     input_points.append(coords)
                     input_labels.append(0)
+                    print(coords)
                 if data == "Segment":
                     input_points = np.array(input_points)
                     input_labels = np.array(input_labels)
                     mask = segment(input_points,input_labels)
                     plt.imshow(image)
                     show_mask(mask,plt.gca())
+                    show_points(input_points,input_labels,plt.gca())
                     plt.show()
                 if data == "Modify":
                     print("Modify")
