@@ -9,7 +9,7 @@ import numpy as np
 
 from segment_anything import sam_model_registry, SamPredictor
 
-sam_checkpoint = "sam_vit_b_01ec64.pth"
+sam_checkpoint = "models/sam_vit_b_01ec64.pth"
 model_type = "vit_b"
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -51,6 +51,12 @@ def show_points(coords, labels, ax, marker_size=375):
                linewidth=1.25)
     ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white',
                linewidth=1.25)
+
+def save_mask(mask):
+    color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
+    h, w = mask.shape[-2:]
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    plt.imsave("./mask.png",mask_image)
 
 import socket
 import struct
@@ -95,6 +101,7 @@ if __name__ == '__main__':
                     show_mask(mask,plt.gca())
                     show_points(input_points,input_labels,plt.gca())
                     plt.show()
+                    save_mask(mask)
                 if data == "Modify":
                     print("Modify")
                 if data == "ExportDone":
