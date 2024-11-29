@@ -17,4 +17,5 @@ Thumbs.db
 .idea/
 
 ./out.exr
+./mask.png
 ./models

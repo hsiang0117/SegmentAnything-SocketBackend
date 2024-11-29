@@ -94,12 +94,12 @@ if __name__ == '__main__':
                     input_labels.append(0)
                     print(coords)
                 if data == "Segment":
-                    input_points = np.array(input_points)
-                    input_labels = np.array(input_labels)
-                    mask = segment(input_points,input_labels)
+                    input_points_array = np.array(input_points)
+                    input_labels_array = np.array(input_labels)
+                    mask = segment(input_points_array,input_labels_array)
                     plt.imshow(image)
                     show_mask(mask,plt.gca())
-                    show_points(input_points,input_labels,plt.gca())
+                    show_points(input_points_array,input_labels_array,plt.gca())
                     plt.show()
                     save_mask(mask)
                 if data == "Modify":
