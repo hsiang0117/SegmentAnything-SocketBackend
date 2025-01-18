@@ -3,6 +3,9 @@ import os
 import matplotlib.pyplot as plt
 import torch
 
+from tilemodifier import *
+from utils import get_target_tiles
+
 os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
 import cv2
 import numpy as np
@@ -20,15 +23,14 @@ sam.to(device=device)
 predictor = SamPredictor(sam)
 
 def get_image():
-    image = cv2.imread('out.exr', cv2.IMREAD_UNCHANGED)
-    image = image[:, :, :3]
-    image = cv2.normalize(image, None, 0, 1, cv2.NORM_MINMAX)
-    image = np.power(image, 1.0 / 2.2)
-    image = (image * 255).astype(np.uint8)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    predictor.set_image(image)
-    print("Set image Done")
-    return image
+    img = cv2.imread('out.exr', cv2.IMREAD_UNCHANGED)
+    img = img[:, :, :3]
+    img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
+    img = np.power(img, 1.0 / 2.2)
+    img = (img * 255).astype(np.uint8)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    predictor.set_image(img)
+    return img
 
 def segment(input_point,input_label):
     mask, _, _ = predictor.predict(
@@ -77,6 +79,7 @@ if __name__ == '__main__':
             while True:
                 data = connection.recv(1024)
                 data = data.decode()
+                content = ""
                 if data == "PositiveDot":
                     dot = connection.recv(1024).decode()
                     coords = dot.split(" ")
@@ -97,22 +100,30 @@ if __name__ == '__main__':
                     input_points_array = np.array(input_points)
                     input_labels_array = np.array(input_labels)
                     mask = segment(input_points_array,input_labels_array)
-                    plt.imshow(image)
-                    show_mask(mask,plt.gca())
-                    show_points(input_points_array,input_labels_array,plt.gca())
-                    plt.show()
+                    # plt.imshow(image)
+                    # show_mask(mask,plt.gca())
+                    # show_points(input_points_array,input_labels_array,plt.gca())
+                    # plt.show()
+                    print(mask.shape)
                     save_mask(mask)
+                    content = "SegmentDone"
                 if data == "Modify":
+                    tile1_path = "E:/terrain/yaohujichang-19J/18/431208/172968.terrain"
+                    tile2_path = "E:/terrain/yaohujichang-19J/18/431209/172968.terrain"
+                    modify_watermask(tile1_path,mask,0,256,0,256)
+                    modify_watermask(tile2_path,mask,0,256,256,512)
                     print("Modify")
                 if data == "ExportDone":
                     image = get_image()
+                    content = "SetImageDone"
                 if data == "Clear":
                     image = None
                     mask = None
                     input_points = []
                     input_labels = []
 
-                content = "received"
+                if content == "":
+                    content = "received"
                 buffer = struct.pack(">BB", 1, len(content))
                 buffer += content.encode()
                 connection.sendall(buffer)
