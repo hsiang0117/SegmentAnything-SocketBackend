@@ -1,12 +1,9 @@
-import os
-
 import matplotlib.pyplot as plt
 import torch
 
 from tilemodifier import *
-from utils import get_target_tiles
 
-os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 import cv2
 import numpy as np
 
@@ -32,7 +29,7 @@ def get_image():
     predictor.set_image(img)
     return img
 
-def segment(input_point,input_label):
+def segment(input_point, input_label):
     mask, _, _ = predictor.predict(
         point_coords=input_point,
         point_labels=input_label,
@@ -58,13 +55,13 @@ def save_mask(mask):
     color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    plt.imsave("./mask.png",mask_image)
+    plt.imsave("./mask.png", mask_image)
 
 import socket
 import struct
 
-s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-s.bind(("",8080))
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(("", 8080))
 s.listen(1)
 
 if __name__ == '__main__':
@@ -99,20 +96,19 @@ if __name__ == '__main__':
                 if data == "Segment":
                     input_points_array = np.array(input_points)
                     input_labels_array = np.array(input_labels)
-                    mask = segment(input_points_array,input_labels_array)
-                    # plt.imshow(image)
-                    # show_mask(mask,plt.gca())
-                    # show_points(input_points_array,input_labels_array,plt.gca())
-                    # plt.show()
-                    print(mask.shape)
+                    mask = segment(input_points_array, input_labels_array)
                     save_mask(mask)
+                    mask = mask.tolist()[0]
+                    mask = analyse_mask(mask)
                     content = "SegmentDone"
                 if data == "Modify":
-                    tile1_path = "E:/terrain/yaohujichang-19J/18/431208/172968.terrain"
-                    tile2_path = "E:/terrain/yaohujichang-19J/18/431209/172968.terrain"
-                    modify_watermask(tile1_path,mask,0,256,0,256)
-                    modify_watermask(tile2_path,mask,0,256,256,512)
-                    print("Modify")
+                    terrain_folder_path = connection.recv(1024).decode()
+                    lod = connection.recv(1024).decode()
+                    bottom_left_and_top_right = connection.recv(1024).decode().split(" ")
+                    offset = connection.recv(1024).decode().split(" ")
+                    offset[0] = int(offset[0])
+                    offset[1] = int(offset[1])
+                    modify_tiles(mask,terrain_folder_path,lod,bottom_left_and_top_right,offset)
                 if data == "ExportDone":
                     image = get_image()
                     content = "SetImageDone"
