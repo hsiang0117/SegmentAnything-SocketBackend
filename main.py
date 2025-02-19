@@ -22,7 +22,11 @@ predictor = SamPredictor(sam)
 
 def get_image():
     img = cv2.imread('out.exr', cv2.IMREAD_UNCHANGED)
+    if img is None:
+        raise ValueError("Failed to load image. Check the file path and format.")
     img = img[:, :, :3]
+    img = np.nan_to_num(img, nan=0.0, posinf=1.0, neginf=0.0)  # 将 NaN/Inf 替换为合理值
+    img = np.maximum(img, 0)  # 确保没有负数
     img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
     img = np.power(img, 1.0 / 2.2)
     img = (img * 255).astype(np.uint8)
@@ -115,6 +119,7 @@ if __name__ == '__main__':
                     offset[0] = int(offset[0])
                     offset[1] = int(offset[1])
                     modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset)
+                    content = "ModifyDone"
                 if data == "ExportDone":
                     image = get_image()
                     content = "SetImageDone"
@@ -123,6 +128,7 @@ if __name__ == '__main__':
                     mask = None
                     input_points = []
                     input_labels = []
+                    print("canceled")
 
                 if content == "":
                     content = "received"

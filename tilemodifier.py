@@ -285,3 +285,10 @@ def modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offs
     thread1.start()
     thread2.start()
     thread3.start()
+
+    thread0.join()
+    thread1.join()
+    thread2.join()
+    thread3.join()
+
+    print("modify finished")
