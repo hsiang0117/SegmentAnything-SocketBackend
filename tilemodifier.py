@@ -1,5 +1,7 @@
 import os
 import struct
+import threading
+from math import floor
 
 unsigned_int_format = '<I'
 unsigned_char_format = 'B'
@@ -69,7 +71,8 @@ def read_watermask(file_path, pos):
 # Get watermask bytearray that will be written back to the terrain file.
 # This bytearray obtains by originate watermask from the terrain file and the segment result through an algorithm
 # which considers the relative position of target tile and the area covered by segment result.
-def get_watermask(file_path, pos, mask, corner, offset):
+def get_watermask(file_path, mask, corner, offset):
+    pos = get_watermask_pos(file_path)
     new_mask = b''
     if pos == -1:
         if corner == 0:
@@ -172,15 +175,11 @@ def get_watermask(file_path, pos, mask, corner, offset):
                             new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
                         else:
                             new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-
     return new_mask
 
 
-# Modify watermask within a single tile with the new mask which come from get_watermask().
-# If there's no watermask (input pos = -1) then add watermask to the terrain file.
-def modify_watermask(file_path, mask, corner, offset):
+def write_back(file_path, new_mask):
     pos = get_watermask_pos(file_path)
-    new_mask = get_watermask(file_path, pos, mask, corner, offset)
     if pos == -1:
         file = open(file_path, 'ab')
         file.write(b'\x02\x00\x00\x01\x00')
@@ -205,23 +204,84 @@ def modify_watermask(file_path, mask, corner, offset):
         with open(file_path, 'wb') as file:
             data = data_before_water + data_remain
             file.write(data)
+    print(file_path + " done")
+
+
+# Modify watermask within a single tile with the new mask which come from get_watermask().
+# If there's no watermask (input pos = -1) then add watermask to the terrain file.
+def modify_watermask(file_path, mask, corner, offset):
+    new_mask = get_watermask(file_path, mask, corner, offset)
+    write_back(file_path, new_mask)
+
+
+# Expand a mask by nearest interpolation.
+# For example from 128*128 to 256*256.
+def mask_interpolation(mask):
+    expanded_mask = b''
+    for i in range(256):
+        for j in range(256):
+            expanded_mask += struct.pack(unsigned_char_format, mask[floor(i / 2) * 128 + floor(j / 2)])
+    return expanded_mask
+
+
+def modify_child(parent_path, file_path, corner):
+    parent_pos = get_watermask_pos(parent_path)
+    parent_length, parent_mask = read_watermask(parent_path, parent_pos)
+    origin_mask = b''
+    if corner == 0:
+        for i in range(128, 256):
+            origin_mask += parent_mask[i * 256:i * 256 + 128]
+    elif corner == 1:
+        for i in range(128, 256):
+            origin_mask += parent_mask[i * 256 + 128:i * 256 + 256]
+    elif corner == 2:
+        for i in range(128):
+            origin_mask += parent_mask[i * 256:i * 256 + 128]
+    else:
+        for i in range(128):
+            origin_mask += parent_mask[i * 256 + 128:i * 256 + 256]
+    new_mask = mask_interpolation(origin_mask)
+    write_back(file_path, new_mask)
+
+
+# Modify child tiles of higher lod level after modifying a tile
+def recursive_downward_modify(terrain_folder_path, lod, X, Y):
+    parent_path = terrain_folder_path + str(lod) + "\\" + str(X) + "\\" + str(Y) + ".terrain"
+    for i in range(2):
+        for j in range(2):
+            child_path = terrain_folder_path + str(lod + 1) + "\\" + str(X * 2 + j) + "\\" + str(Y * 2 + i) + ".terrain"
+            if os.path.exists(child_path):
+                modify_child(parent_path, child_path, 2 * i + j)
+                recursive_downward_modify(terrain_folder_path, lod + 1, X * 2 + j, Y * 2 + i)
+
+
+class multi_thread(threading.Thread):
+    def __init__(self, mask, terrain_folder_path, lod, X, Y, offset, corner):
+        threading.Thread.__init__(self)
+        self.mask = mask
+        self.terrain_folder_path = terrain_folder_path
+        self.lod = lod
+        self.X = X
+        self.Y = Y
+        self.offset = offset
+        self.corner = corner
+
+    def run(self):
+        file_path = self.terrain_folder_path + self.lod + "\\" + self.X + "\\" + self.Y + ".terrain"
+        if (os.path.exists(file_path)):
+            modify_watermask(file_path, self.mask, self.corner, self.offset)
+            recursive_downward_modify(self.terrain_folder_path, int(self.lod), int(self.X), int(self.Y))
+        print("thread-" + str(self.corner) + " down")
 
 
 # modify tiles that are covered by the segment result.
 def modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset):
-    file_path = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[0] + "\\" + \
-                bottom_left_and_top_right[1] + ".terrain"
-    if os.path.exists(file_path):
-        modify_watermask(file_path, mask, 0, offset)
-    file_path = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[2] + "\\" + \
-                bottom_left_and_top_right[1] + ".terrain"
-    if os.path.exists(file_path):
-        modify_watermask(file_path, mask, 1, offset)
-    file_path = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[0] + "\\" + \
-                bottom_left_and_top_right[3] + ".terrain"
-    if os.path.exists(file_path):
-        modify_watermask(file_path, mask, 2, offset)
-    file_path = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[2] + "\\" + \
-                bottom_left_and_top_right[3] + ".terrain"
-    if os.path.exists(file_path):
-        modify_watermask(file_path, mask, 3, offset)
+    thread0 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[0],bottom_left_and_top_right[1],offset,0)
+    thread1 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[2],bottom_left_and_top_right[1],offset,1)
+    thread2 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[0],bottom_left_and_top_right[3],offset,2)
+    thread3 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[2],bottom_left_and_top_right[3],offset,3)
+
+    thread0.start()
+    thread1.start()
+    thread2.start()
+    thread3.start()

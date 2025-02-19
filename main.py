@@ -19,6 +19,7 @@ sam.to(device=device)
 
 predictor = SamPredictor(sam)
 
+
 def get_image():
     img = cv2.imread('out.exr', cv2.IMREAD_UNCHANGED)
     img = img[:, :, :3]
@@ -29,6 +30,7 @@ def get_image():
     predictor.set_image(img)
     return img
 
+
 def segment(input_point, input_label):
     mask, _, _ = predictor.predict(
         point_coords=input_point,
@@ -37,11 +39,13 @@ def segment(input_point, input_label):
     )
     return mask
 
+
 def show_mask(mask, ax):
     color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     ax.imshow(mask_image)
+
 
 def show_points(coords, labels, ax, marker_size=375):
     pos_points = coords[labels == 1]
@@ -51,11 +55,13 @@ def show_points(coords, labels, ax, marker_size=375):
     ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white',
                linewidth=1.25)
 
+
 def save_mask(mask):
     color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
     h, w = mask.shape[-2:]
     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     plt.imsave("./mask.png", mask_image)
+
 
 import socket
 import struct
@@ -108,7 +114,7 @@ if __name__ == '__main__':
                     offset = connection.recv(1024).decode().split(" ")
                     offset[0] = int(offset[0])
                     offset[1] = int(offset[1])
-                    modify_tiles(mask,terrain_folder_path,lod,bottom_left_and_top_right,offset)
+                    modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset)
                 if data == "ExportDone":
                     image = get_image()
                     content = "SetImageDone"
