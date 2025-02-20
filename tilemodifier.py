@@ -1,6 +1,9 @@
 import os
 import struct
 import threading
+import numpy as np
+from scipy.signal import convolve2d
+from scipy.ndimage import binary_closing, binary_opening
 from math import floor
 
 unsigned_int_format = '<I'
@@ -179,6 +182,7 @@ def get_watermask(file_path, mask, corner, offset):
 
 
 def write_back(file_path, new_mask):
+    new_mask = morphological_process(new_mask)
     pos = get_watermask_pos(file_path)
     if pos == -1:
         file = open(file_path, 'ab')
@@ -222,6 +226,56 @@ def mask_interpolation(mask):
         for j in range(256):
             expanded_mask += struct.pack(unsigned_char_format, mask[floor(i / 2) * 128 + floor(j / 2)])
     return expanded_mask
+
+
+# called before written back to terrain file.
+# including opening, closing and convolution
+def morphological_process(mask):
+    opening_and_closing_filter = np.array([
+    [1,1,1],
+    [1,1,1],
+    [1,1,1]
+    ])
+
+    convolution_filter = np.array([
+        [0, 0, 0, 1 / 25, 0, 0, 0],
+        [0, 0, 1 / 25, 1 / 25, 1 / 25, 0, 0],
+        [0, 1 / 25, 1 / 25, 1 / 25, 1 / 25, 1 / 25, 0],
+        [1 / 25, 1 / 25, 1 / 25, 1 / 25, 1 / 25, 1 / 25, 1 / 25],
+        [0, 1 / 25, 1 / 25, 1 / 25, 1 / 25, 1 / 25, 0],
+        [0, 0, 1 / 25, 1 / 25, 1 / 25, 0, 0],
+        [0, 0, 0, 1 / 25, 0, 0, 0]
+    ])
+
+    byte_array = np.frombuffer(mask, dtype=np.uint8).reshape(256, 256)
+    binary_image = (byte_array != 0).astype(bool)
+
+    opened_image = binary_opening(
+        binary_image,
+        structure=opening_and_closing_filter,
+        iterations=2
+    )
+
+    closed_image = binary_closing(
+        opened_image,
+        structure=opening_and_closing_filter,
+        iterations=2,
+        border_value=1
+    )
+    closed_image = np.where(closed_image, 0xff, 0x00).astype(np.uint8)
+
+    convolved_image = convolve2d(
+        closed_image,
+        convolution_filter,
+        mode='same',
+        boundary='symm'
+    )
+    convolvded_array = np.asarray(convolved_image, dtype=int).flatten()
+
+    output_array = b''
+    for i in convolvded_array:
+        output_array += struct.pack("<B", i)
+    return output_array
 
 
 def modify_child(parent_path, file_path, corner):
