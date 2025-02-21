@@ -59,6 +59,7 @@ def get_watermask_pos(file_path):
     return -1
 
 
+# Read current watermask from terrain file.
 def read_watermask(file_path, pos):
     file = open(file_path, 'rb')
     if pos == -1:
@@ -74,7 +75,7 @@ def read_watermask(file_path, pos):
 # Get watermask bytearray that will be written back to the terrain file.
 # This bytearray obtains by originate watermask from the terrain file and the segment result through an algorithm
 # which considers the relative position of target tile and the area covered by segment result.
-def get_watermask(file_path, mask, corner, offset):
+def get_new_watermask(file_path, mask, corner, offset):
     pos = get_watermask_pos(file_path)
     new_mask = b''
     if pos == -1:
@@ -181,55 +182,34 @@ def get_watermask(file_path, mask, corner, offset):
     return new_mask
 
 
-def write_back(file_path, new_mask):
-    new_mask = morphological_process(new_mask)
-    pos = get_watermask_pos(file_path)
-    if pos == -1:
-        file = open(file_path, 'ab')
-        file.write(b'\x02\x00\x00\x01\x00')
-        file.write(new_mask)
-        file.close()
-    else:
-        file = open(file_path, 'rb+')
-        data_before_water = bytearray(file.read(pos))
-        data_remain = bytearray(file.read())
-        watermask_length = data_remain[0:4]
-        watermask_length = struct.unpack(unsigned_int_format, watermask_length)[0]
-        if watermask_length == 1:
-            data_remain[0:4] = b'\x00\x00\x01\x00'
-            del data_remain[4]
-            data_remain += new_mask
-        else:
-            del data_remain[4:]
-            data_remain += new_mask
-        file.close()
-
-        # write back
-        with open(file_path, 'wb') as file:
-            data = data_before_water + data_remain
-            file.write(data)
-    print(file_path + " done")
+# Consider a point (x,y) is inside a polygon or not by ray casting method.
+# Poly is a list [(x0, y0), (x1, y1), ..., (xn-1, yn-1)] indicates a closed route.
+def point_in_polygon(x, y, poly):
+    inside = False
+    n = len(poly)
+    p1x, p1y = poly[0]
+    for i in range(1, n + 1):
+        p2x, p2y = poly[i % n]
+        if min(p1y, p2y) < y <= max(p1y, p2y):
+            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y + 1e-10) + p1x
+            if x <= xinters:
+                inside = not inside
+        p1x, p1y = p2x, p2y
+    return inside
 
 
-# Modify watermask within a single tile with the new mask which come from get_watermask().
-# If there's no watermask (input pos = -1) then add watermask to the terrain file.
-def modify_watermask(file_path, mask, corner, offset):
-    new_mask = get_watermask(file_path, mask, corner, offset)
-    write_back(file_path, new_mask)
+# Do photoshop-like pen process.
+# Manually select water area.
+def pen_process(points, mask):
+    for y in range(mask.shape[0]):
+        for x in range(mask.shape[1]):
+            if point_in_polygon(x + 0.5, y + 0.5, points):
+                mask[y][x] = True
+    return mask
 
 
-# Expand a mask by nearest interpolation.
-# For example from 128*128 to 256*256.
-def mask_interpolation(mask):
-    expanded_mask = b''
-    for i in range(256):
-        for j in range(256):
-            expanded_mask += struct.pack(unsigned_char_format, mask[floor(i / 2) * 128 + floor(j / 2)])
-    return expanded_mask
-
-
-# called before written back to terrain file.
-# including opening, closing and convolution
+# Called before written back to terrain file.
+# Including opening, closing and convolution
 def morphological_process(mask):
     opening_and_closing_filter = np.array([
     [1,1,1],
@@ -276,6 +256,54 @@ def morphological_process(mask):
     for i in convolvded_array:
         output_array += struct.pack("<B", i)
     return output_array
+
+
+# Write watermask back to terrain file.
+def write_back(file_path, new_mask):
+    new_mask = morphological_process(new_mask)
+    pos = get_watermask_pos(file_path)
+    if pos == -1:
+        file = open(file_path, 'ab')
+        file.write(b'\x02\x00\x00\x01\x00')
+        file.write(new_mask)
+        file.close()
+    else:
+        file = open(file_path, 'rb+')
+        data_before_water = bytearray(file.read(pos))
+        data_remain = bytearray(file.read())
+        watermask_length = data_remain[0:4]
+        watermask_length = struct.unpack(unsigned_int_format, watermask_length)[0]
+        if watermask_length == 1:
+            data_remain[0:4] = b'\x00\x00\x01\x00'
+            del data_remain[4]
+            data_remain += new_mask
+        else:
+            del data_remain[4:]
+            data_remain += new_mask
+        file.close()
+
+        # write back
+        with open(file_path, 'wb') as file:
+            data = data_before_water + data_remain
+            file.write(data)
+    print(file_path + " done")
+
+
+# Modify watermask within a single tile with the new mask which come from get_watermask().
+# If there's no watermask (input pos = -1) then add watermask to the terrain file.
+def modify_watermask(file_path, mask, corner, offset):
+    new_mask = get_new_watermask(file_path, mask, corner, offset)
+    write_back(file_path, new_mask)
+
+
+# Expand a mask by nearest interpolation.
+# For example from 128*128 to 256*256.
+def mask_interpolation(mask):
+    expanded_mask = b''
+    for i in range(256):
+        for j in range(256):
+            expanded_mask += struct.pack(unsigned_char_format, mask[floor(i / 2) * 128 + floor(j / 2)])
+    return expanded_mask
 
 
 def modify_child(parent_path, file_path, corner):
@@ -328,7 +356,7 @@ class multi_thread(threading.Thread):
         print("thread-" + str(self.corner) + " down")
 
 
-# modify tiles that are covered by the segment result.
+# Modify tiles that are covered by the segment result.
 def modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset):
     thread0 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[0],bottom_left_and_top_right[1],offset,0)
     thread1 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[2],bottom_left_and_top_right[1],offset,1)

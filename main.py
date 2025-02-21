@@ -62,8 +62,8 @@ def show_points(coords, labels, ax, marker_size=375):
 
 def save_mask(mask):
     color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
-    h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+    h, w = mask.shape[:2]
+    mask_image = mask.reshape(h, w, -1) * color.reshape(1, 1, -1)
     plt.imsave("./mask.png", mask_image)
 
 
@@ -79,9 +79,10 @@ if __name__ == '__main__':
         connection, address = s.accept()
         print("Connected by:", address)
         image = None
-        mask = None
+        mask = np.zeros((256, 256), dtype=bool)
         input_points = []
         input_labels = []
+        pen_points = []
         try:
             while True:
                 data = connection.recv(1024)
@@ -94,7 +95,6 @@ if __name__ == '__main__':
                     coords[1] = float(coords[1])
                     input_points.append(coords)
                     input_labels.append(1)
-                    print(coords)
                 if data == "NegativeDot":
                     dot = connection.recv(1024).decode()
                     coords = dot.split(" ")
@@ -102,16 +102,25 @@ if __name__ == '__main__':
                     coords[1] = float(coords[1])
                     input_points.append(coords)
                     input_labels.append(0)
-                    print(coords)
+                if data == "PenDot":
+                    dot = connection.recv(1024).decode()
+                    coords = dot.split(" ")
+                    coords[0] = float(coords[0])
+                    coords[1] = float(coords[1])
+                    pen_points.append(coords)
                 if data == "Segment":
                     input_points_array = np.array(input_points)
                     input_labels_array = np.array(input_labels)
-                    mask = segment(input_points_array, input_labels_array)
+                    pen_points_array = np.array(pen_points)
+                    if len(input_points_array):
+                        mask = segment(input_points_array, input_labels_array)
+                        mask = mask.reshape(256, 256)
+                    if len(pen_points_array):
+                        mask = pen_process(pen_points_array, mask)
                     save_mask(mask)
-                    mask = mask.tolist()[0]
-                    mask = analyse_mask(mask)
                     content = "SegmentDone"
                 if data == "Modify":
+                    mask = analyse_mask(mask)
                     terrain_folder_path = connection.recv(1024).decode()
                     lod = connection.recv(1024).decode()
                     bottom_left_and_top_right = connection.recv(1024).decode().split(" ")
@@ -125,9 +134,10 @@ if __name__ == '__main__':
                     content = "SetImageDone"
                 if data == "Clear":
                     image = None
-                    mask = None
+                    mask = np.zeros((256, 256), dtype=bool)
                     input_points = []
                     input_labels = []
+                    pen_points = []
                     print("canceled")
 
                 if content == "":
