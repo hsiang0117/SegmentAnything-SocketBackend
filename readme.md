@@ -1,3 +1,3 @@
 # cesium terrain文件水域信息修改工具后端
 
-基于Segment-Anything的水域修改工具，用于修改cesium所使用terrain文件中的水域信息。接收来自前端地图的二维地图以及标点，根据所选模式自动或手动分割出水面区域并逐级写入terrain文件。
+基于Segment-Anything的水域修改工具，用于修改cesium所使用terrain文件中的水域信息。通过socket接收来自前端地图的二维地图以及标点，根据所选模式自动或手动分割出水面区域并逐级写入terrain文件。
