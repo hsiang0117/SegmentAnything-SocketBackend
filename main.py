@@ -1,5 +1,8 @@
-import matplotlib.pyplot as plt
+import subprocess
+import sys
+
 import torch
+from matplotlib import pyplot as plt
 
 from tilemodifier import *
 
@@ -9,19 +12,13 @@ import numpy as np
 
 from segment_anything import sam_model_registry, SamPredictor
 
-sam_checkpoint = "models/sam_vit_b_01ec64.pth"
+sam_checkpoint = "./models/sam_vit_b_01ec64.pth"
 model_type = "vit_b"
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-sam.to(device=device)
-
-predictor = SamPredictor(sam)
-
-
 def get_image():
-    img = cv2.imread('out.exr', cv2.IMREAD_UNCHANGED)
+    img = cv2.imread('./out.exr', cv2.IMREAD_UNCHANGED)
     if img is None:
         raise ValueError("Failed to load image. Check the file path and format.")
     img = img[:, :, :3]
@@ -41,45 +38,32 @@ def segment(input_point, input_label):
         point_labels=input_label,
         multimask_output=False,
     )
-    return mask
-
-
-def show_mask(mask, ax):
-    color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
-    h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    ax.imshow(mask_image)
-
-
-def show_points(coords, labels, ax, marker_size=375):
-    pos_points = coords[labels == 1]
-    neg_points = coords[labels == 0]
-    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white',
-               linewidth=1.25)
-    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white',
-               linewidth=1.25)
+    return mask.reshape(256, 256)
 
 
 def save_mask(mask):
     color = np.array([255 / 255, 255 / 255, 255 / 255, 0.5])
-    h, w = mask.shape[:2]
-    mask_image = mask.reshape(h, w, -1) * color.reshape(1, 1, -1)
+    h, w = mask.shape[-2:]
+    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
     plt.imsave("./mask.png", mask_image)
 
 
 import socket
-import struct
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("", 8080))
 s.listen(1)
 
 if __name__ == '__main__':
+    subprocess.Popen(["./MapSample-Win64-Shipping.exe"])
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+    sam.to(device=device)
+    predictor = SamPredictor(sam)
+    image = None
+    mask = np.zeros(shape=(256, 256), dtype=bool)
     while True:
         connection, address = s.accept()
         print("Connected by:", address)
-        image = None
-        mask = np.zeros((256, 256), dtype=bool)
         input_points = []
         input_labels = []
         pen_points = []
@@ -114,39 +98,48 @@ if __name__ == '__main__':
                     pen_points_array = np.array(pen_points)
                     if len(input_points_array):
                         mask = segment(input_points_array, input_labels_array)
-                        mask = mask.reshape(256, 256)
                     if len(pen_points_array):
                         mask = pen_process(pen_points_array, mask)
                     save_mask(mask)
                     content = "SegmentDone"
                 if data == "Modify":
-                    mask = analyse_mask(mask)
+                    cover = connection.recv(1024).decode()
                     terrain_folder_path = connection.recv(1024).decode()
                     lod = connection.recv(1024).decode()
                     bottom_left_and_top_right = connection.recv(1024).decode().split(" ")
                     offset = connection.recv(1024).decode().split(" ")
                     offset[0] = int(offset[0])
                     offset[1] = int(offset[1])
-                    modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset)
+                    mask = analyse_mask(mask.tolist())
+                    modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover)
+                    content = "ModifyDone"
+                if data == "ModifyWithoutRecursive":
+                    cover = connection.recv(1024).decode()
+                    terrain_folder_path = connection.recv(1024).decode()
+                    lod = connection.recv(1024).decode()
+                    bottom_left_and_top_right = connection.recv(1024).decode().split(" ")
+                    offset = connection.recv(1024).decode().split(" ")
+                    offset[0] = int(offset[0])
+                    offset[1] = int(offset[1])
+                    mask = analyse_mask(mask.tolist())
+                    modify_without_recursive(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset,
+                                             connection, cover)
                     content = "ModifyDone"
                 if data == "ExportDone":
                     image = get_image()
                     content = "SetImageDone"
                 if data == "Clear":
                     image = None
-                    mask = np.zeros((256, 256), dtype=bool)
+                    mask = np.zeros(shape=(256, 256), dtype=bool)
                     input_points = []
                     input_labels = []
                     pen_points = []
-                    print("canceled")
+                    predictor.reset_image()
 
                 if content == "":
                     content = "received"
-                buffer = struct.pack(">BB", 1, len(content))
-                buffer += content.encode()
-                connection.sendall(buffer)
+                connection.sendall(content.encode())
         except ConnectionAbortedError:
             print("Connection aborted")
             connection.close()
-
-    s.close()
+            sys.exit(0)

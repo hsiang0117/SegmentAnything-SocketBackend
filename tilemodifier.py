@@ -1,10 +1,11 @@
 import os
 import struct
 import threading
-import numpy as np
-from scipy.signal import convolve2d
-from scipy.ndimage import binary_closing, binary_opening
 from math import floor
+
+import numpy as np
+from scipy.ndimage import binary_closing, binary_opening
+from scipy.signal import convolve2d
 
 unsigned_int_format = '<I'
 unsigned_char_format = 'B'
@@ -75,7 +76,7 @@ def read_watermask(file_path, pos):
 # Get watermask bytearray that will be written back to the terrain file.
 # This bytearray obtains by originate watermask from the terrain file and the segment result through an algorithm
 # which considers the relative position of target tile and the area covered by segment result.
-def get_new_watermask(file_path, mask, corner, offset):
+def get_new_watermask(file_path, mask, corner, offset, cover):
     pos = get_watermask_pos(file_path)
     new_mask = b''
     if pos == -1:
@@ -114,7 +115,16 @@ def get_new_watermask(file_path, mask, corner, offset):
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j >= offset[0] and i <= (255 - offset[1]):
-                            new_mask += mask[i + offset[1]][j - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1]][j - offset[0]] != b'\x00':
+                                    new_mask+=mask[i + offset[1]][j - offset[0]]
+                                else:
+                                    if origin_mask == 0:
+                                        new_mask += b'\x00'
+                                    else:
+                                        new_mask += b'\xff'
+                            else:
+                                new_mask += mask[i + offset[1]][j - offset[0]]
                         else:
                             if origin_mask == 0:
                                 new_mask += b'\x00'
@@ -124,7 +134,16 @@ def get_new_watermask(file_path, mask, corner, offset):
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j <= offset[0] and i <= (255 - offset[1]):
-                            new_mask += mask[i + offset[1]][j + 255 - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1]][j + 255 - offset[0]] != b'\x00':
+                                    new_mask+=mask[i + offset[1]][j + 255 - offset[0]]
+                                else:
+                                    if origin_mask == 0:
+                                        new_mask += b'\x00'
+                                    else:
+                                        new_mask += b'\xff'
+                            else:
+                                new_mask += mask[i + offset[1]][j + 255 - offset[0]]
                         else:
                             if origin_mask == 0:
                                 new_mask += b'\x00'
@@ -134,7 +153,16 @@ def get_new_watermask(file_path, mask, corner, offset):
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j >= offset[0] and i >= (255 - offset[1]):
-                            new_mask += mask[i + offset[1] - 255][j - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1] - 255][j - offset[0]] != b'\x00':
+                                    new_mask+=mask[i + offset[1] - 255][j - offset[0]]
+                                else:
+                                    if origin_mask == 0:
+                                        new_mask += b'\x00'
+                                    else:
+                                        new_mask += b'\xff'
+                            else:
+                                new_mask += mask[i + offset[1] - 255][j - offset[0]]
                         else:
                             if origin_mask == 0:
                                 new_mask += b'\x00'
@@ -144,7 +172,16 @@ def get_new_watermask(file_path, mask, corner, offset):
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j <= offset[0] and i >= (255 - offset[1]):
-                            new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1] - 255][j + 255 - offset[0]] != b'\x00':
+                                    new_mask+=mask[i + offset[1] - 255][j + 255 - offset[0]]
+                                else:
+                                    if origin_mask == 0:
+                                        new_mask += b'\x00'
+                                    else:
+                                        new_mask += b'\xff'
+                            else:
+                                new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
                         else:
                             if origin_mask == 0:
                                 new_mask += b'\x00'
@@ -155,28 +192,52 @@ def get_new_watermask(file_path, mask, corner, offset):
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j >= offset[0] and i <= (255 - offset[1]):
-                            new_mask += mask[i + offset[1]][j - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1]][j - offset[0]] != b'\x00':
+                                    new_mask += mask[i + offset[1]][j - offset[0]]
+                                else:
+                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
+                            else:
+                                new_mask += mask[i + offset[1]][j - offset[0]]
                         else:
                             new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
             elif corner == 1:
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j <= offset[0] and i <= (255 - offset[1]):
-                            new_mask += mask[i + offset[1]][j + 255 - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1]][j + 255 - offset[0]] != b'\x00':
+                                    new_mask += mask[i + offset[1]][j + 255 - offset[0]]
+                                else:
+                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
+                            else:
+                                new_mask += mask[i + offset[1]][j + 255 - offset[0]]
                         else:
                             new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
             elif corner == 2:
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j >= offset[0] and i >= (255 - offset[1]):
-                            new_mask += mask[i + offset[1] - 255][j - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1] - 255][j - offset[0]] != b'\x00':
+                                    new_mask += mask[i + offset[1] - 255][j - offset[0]]
+                                else:
+                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
+                            else:
+                                new_mask += mask[i + offset[1] - 255][j - offset[0]]
                         else:
                             new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
             elif corner == 3:
                 for i in range(0, 256):
                     for j in range(0, 256):
                         if j <= offset[0] and i >= (255 - offset[1]):
-                            new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
+                            if cover == "Fill":
+                                if mask[i + offset[1] - 255][j + 255 - offset[0]] != b'\x00':
+                                    new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
+                                else:
+                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
+                            else:
+                                new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
                         else:
                             new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
     return new_mask
@@ -212,9 +273,9 @@ def pen_process(points, mask):
 # Including opening, closing and convolution
 def morphological_process(mask):
     opening_and_closing_filter = np.array([
-    [1,1,1],
-    [1,1,1],
-    [1,1,1]
+        [1, 1, 1],
+        [1, 1, 1],
+        [1, 1, 1]
     ])
 
     convolution_filter = np.array([
@@ -244,18 +305,18 @@ def morphological_process(mask):
     )
     closed_image = np.where(closed_image, 0xff, 0x00).astype(np.uint8)
 
-    convolved_image = convolve2d(
-        closed_image,
-        convolution_filter,
-        mode='same',
-        boundary='symm'
-    )
-    convolvded_array = np.asarray(convolved_image, dtype=int).flatten()
+    convolved_image = convolve2d(closed_image, convolution_filter, mode='same', boundary='symm')
+    convolved_image = convolve2d(convolved_image, convolution_filter, mode='same', boundary='symm')
+    result = np.where(closed_image == 255, convolved_image, 0)
+    result_array = np.asarray(result, dtype=int).flatten()
 
     output_array = b''
-    for i in convolvded_array:
+    for i in result_array:
         output_array += struct.pack("<B", i)
     return output_array
+
+
+num_modified = 0
 
 
 # Write watermask back to terrain file.
@@ -286,13 +347,15 @@ def write_back(file_path, new_mask):
         with open(file_path, 'wb') as file:
             data = data_before_water + data_remain
             file.write(data)
+    global num_modified
+    num_modified += 1
     print(file_path + " done")
 
 
 # Modify watermask within a single tile with the new mask which come from get_watermask().
 # If there's no watermask (input pos = -1) then add watermask to the terrain file.
-def modify_watermask(file_path, mask, corner, offset):
-    new_mask = get_new_watermask(file_path, mask, corner, offset)
+def modify_watermask(file_path, mask, corner, offset, cover):
+    new_mask = get_new_watermask(file_path, mask, corner, offset, cover)
     write_back(file_path, new_mask)
 
 
@@ -338,7 +401,7 @@ def recursive_downward_modify(terrain_folder_path, lod, X, Y):
 
 
 class multi_thread(threading.Thread):
-    def __init__(self, mask, terrain_folder_path, lod, X, Y, offset, corner):
+    def __init__(self, mask, terrain_folder_path, lod, X, Y, offset, corner, cover):
         threading.Thread.__init__(self)
         self.mask = mask
         self.terrain_folder_path = terrain_folder_path
@@ -347,30 +410,81 @@ class multi_thread(threading.Thread):
         self.Y = Y
         self.offset = offset
         self.corner = corner
+        self.cover = cover
 
     def run(self):
         file_path = self.terrain_folder_path + self.lod + "\\" + self.X + "\\" + self.Y + ".terrain"
-        if (os.path.exists(file_path)):
-            modify_watermask(file_path, self.mask, self.corner, self.offset)
+        if os.path.exists(file_path):
+            modify_watermask(file_path, self.mask, self.corner, self.offset, self.cover)
             recursive_downward_modify(self.terrain_folder_path, int(self.lod), int(self.X), int(self.Y))
         print("thread-" + str(self.corner) + " down")
 
 
+should_send = False
+
+
+def send_num_modified(connection):
+    connection.sendall(str(num_modified).encode())
+    if should_send:
+        timer = threading.Timer(0.5, send_num_modified, args=(connection,))
+        timer.start()
+
+
 # Modify tiles that are covered by the segment result.
-def modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset):
-    thread0 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[0],bottom_left_and_top_right[1],offset,0)
-    thread1 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[2],bottom_left_and_top_right[1],offset,1)
-    thread2 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[0],bottom_left_and_top_right[3],offset,2)
-    thread3 = multi_thread(mask,terrain_folder_path,lod,bottom_left_and_top_right[2],bottom_left_and_top_right[3],offset,3)
+def modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover):
+    thread0 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[0], bottom_left_and_top_right[1],
+                           offset, 0,cover)
+    thread1 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[2], bottom_left_and_top_right[1],
+                           offset, 1,cover)
+    thread2 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[0], bottom_left_and_top_right[3],
+                           offset, 2,cover)
+    thread3 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[2], bottom_left_and_top_right[3],
+                           offset, 3,cover)
+    timer = threading.Timer(0.5, send_num_modified, args=(connection,))
 
     thread0.start()
     thread1.start()
     thread2.start()
     thread3.start()
+    global should_send
+    should_send = True
+    timer.start()
 
     thread0.join()
     thread1.join()
     thread2.join()
     thread3.join()
+    should_send = False
 
+    global num_modified
+    num_modified = 0
+    print("modify finished")
+
+
+def modify_without_recursive(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover):
+    file_path0 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[0] + "\\" + bottom_left_and_top_right[
+        1] + ".terrain"
+    file_path1 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[2] + "\\" + bottom_left_and_top_right[
+        1] + ".terrain"
+    file_path2 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[0] + "\\" + bottom_left_and_top_right[
+        3] + ".terrain"
+    file_path3 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[2] + "\\" + bottom_left_and_top_right[
+        3] + ".terrain"
+    timer = threading.Timer(0.5, send_num_modified, args=(connection,))
+    global should_send
+    should_send = True
+    timer.start()
+
+    if (os.path.exists(file_path0)):
+        modify_watermask(file_path0, mask, 0, offset, cover)
+    if (os.path.exists(file_path1)):
+        modify_watermask(file_path1, mask, 1, offset, cover)
+    if (os.path.exists(file_path2)):
+        modify_watermask(file_path2, mask, 2, offset, cover)
+    if (os.path.exists(file_path3)):
+        modify_watermask(file_path3, mask, 3, offset, cover)
+
+    should_send = False
+    global num_modified
+    num_modified = 0
     print("modify finished")
