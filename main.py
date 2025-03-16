@@ -54,8 +54,35 @@ s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("", 8080))
 s.listen(1)
 
+def recv_all(sock, n):
+    data = b''
+    while len(data) < n:
+        packet = sock.recv(n-len(data))
+        if not packet:
+            return None
+        data += packet
+    return data
+
+def recv_len(sock):
+    raw_bytes = recv_all(sock,4)
+    if raw_bytes is None:
+        return None
+    if len(raw_bytes) != 4:
+        return None
+    int_value = struct.unpack("<i",raw_bytes)[0]
+    return int_value
+
+def recv_msg(sock):
+    msg_length = recv_len(sock)
+    if msg_length is None:
+        return None
+    raw_msg = recv_all(sock, msg_length)
+    if raw_msg is None:
+        return None
+    return raw_msg.decode()
+
 if __name__ == '__main__':
-    subprocess.Popen(["./MapSample-Win64-Shipping.exe"])
+    subprocess.Popen(["./WaterModifier-Win64-Shipping.exe"])
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
     predictor = SamPredictor(sam)
@@ -69,30 +96,29 @@ if __name__ == '__main__':
         pen_points = []
         try:
             while True:
-                data = connection.recv(1024)
-                data = data.decode()
+                data = recv_msg(connection)
                 content = ""
                 if data == "PositiveDot":
-                    dot = connection.recv(1024).decode()
+                    dot = recv_msg(connection)
                     coords = dot.split(" ")
                     coords[0] = float(coords[0])
                     coords[1] = float(coords[1])
                     input_points.append(coords)
                     input_labels.append(1)
-                if data == "NegativeDot":
-                    dot = connection.recv(1024).decode()
+                elif data == "NegativeDot":
+                    dot = recv_msg(connection)
                     coords = dot.split(" ")
                     coords[0] = float(coords[0])
                     coords[1] = float(coords[1])
                     input_points.append(coords)
                     input_labels.append(0)
-                if data == "PenDot":
-                    dot = connection.recv(1024).decode()
+                elif data == "PenDot":
+                    dot = recv_msg(connection)
                     coords = dot.split(" ")
                     coords[0] = float(coords[0])
                     coords[1] = float(coords[1])
                     pen_points.append(coords)
-                if data == "Segment":
+                elif data == "Segment":
                     input_points_array = np.array(input_points)
                     input_labels_array = np.array(input_labels)
                     pen_points_array = np.array(pen_points)
@@ -102,33 +128,33 @@ if __name__ == '__main__':
                         mask = pen_process(pen_points_array, mask)
                     save_mask(mask)
                     content = "SegmentDone"
-                if data == "Modify":
-                    cover = connection.recv(1024).decode()
-                    terrain_folder_path = connection.recv(1024).decode()
-                    lod = connection.recv(1024).decode()
-                    bottom_left_and_top_right = connection.recv(1024).decode().split(" ")
-                    offset = connection.recv(1024).decode().split(" ")
+                elif data == "Modify":
+                    cover = recv_msg(connection)
+                    terrain_folder_path = recv_msg(connection)
+                    lod = recv_msg(connection)
+                    bottom_left_and_top_right = recv_msg(connection).split(" ")
+                    offset = recv_msg(connection).split(" ")
                     offset[0] = int(offset[0])
                     offset[1] = int(offset[1])
-                    mask = analyse_mask(mask.tolist())
-                    modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover)
+                    array = analyse_mask(mask.tolist())
+                    modify_tiles(array, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover)
                     content = "ModifyDone"
-                if data == "ModifyWithoutRecursive":
-                    cover = connection.recv(1024).decode()
-                    terrain_folder_path = connection.recv(1024).decode()
-                    lod = connection.recv(1024).decode()
-                    bottom_left_and_top_right = connection.recv(1024).decode().split(" ")
-                    offset = connection.recv(1024).decode().split(" ")
+                elif data == "ModifyWithoutRecursive":
+                    cover = recv_msg(connection)
+                    terrain_folder_path = recv_msg(connection)
+                    lod = recv_msg(connection)
+                    bottom_left_and_top_right = recv_msg(connection).split(" ")
+                    offset = recv_msg(connection).split(" ")
                     offset[0] = int(offset[0])
                     offset[1] = int(offset[1])
-                    mask = analyse_mask(mask.tolist())
-                    modify_without_recursive(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset,
+                    array = analyse_mask(mask.tolist())
+                    modify_without_recursive(array, terrain_folder_path, lod, bottom_left_and_top_right, offset,
                                              connection, cover)
                     content = "ModifyDone"
-                if data == "ExportDone":
+                elif data == "ExportDone":
                     image = get_image()
                     content = "SetImageDone"
-                if data == "Clear":
+                elif data == "Clear":
                     image = None
                     mask = np.zeros(shape=(256, 256), dtype=bool)
                     input_points = []
