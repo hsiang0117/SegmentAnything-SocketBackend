@@ -32,13 +32,13 @@ def get_image():
     return img
 
 
-def segment(input_point, input_label):
+def segment(input_point, input_label, ortho_width):
     mask, _, _ = predictor.predict(
         point_coords=input_point,
         point_labels=input_label,
         multimask_output=False,
     )
-    return mask.reshape(256, 256)
+    return mask.reshape(ortho_width, ortho_width)
 
 
 def save_mask(mask):
@@ -50,8 +50,11 @@ def save_mask(mask):
 
 import socket
 
+with open("./port.txt",'r') as f:
+    port = int(f.read().strip())
+
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("", 8080))
+s.bind(("", port))
 s.listen(1)
 
 def recv_all(sock, n):
@@ -82,12 +85,13 @@ def recv_msg(sock):
     return raw_msg.decode()
 
 if __name__ == '__main__':
-    subprocess.Popen(["./WaterModifier-Win64-Shipping.exe"])
+    #subprocess.Popen(["./WaterModifier-Win64-Shipping.exe"])
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
     predictor = SamPredictor(sam)
     image = None
-    mask = np.zeros(shape=(256, 256), dtype=bool)
+    ortho_width = None
+    mask = None
     while True:
         connection, address = s.accept()
         print("Connected by:", address)
@@ -98,7 +102,12 @@ if __name__ == '__main__':
             while True:
                 data = recv_msg(connection)
                 content = ""
-                if data == "PositiveDot":
+                if data == "OrthoWidth":
+                    ortho_width = recv_msg(connection)
+                    ortho_width = int(ortho_width)
+                    print(ortho_width)
+                    mask = np.zeros(shape=(ortho_width,ortho_width), dtype=bool)
+                elif data == "PositiveDot":
                     dot = recv_msg(connection)
                     coords = dot.split(" ")
                     coords[0] = float(coords[0])
@@ -123,7 +132,7 @@ if __name__ == '__main__':
                     input_labels_array = np.array(input_labels)
                     pen_points_array = np.array(pen_points)
                     if len(input_points_array):
-                        mask = segment(input_points_array, input_labels_array)
+                        mask = segment(input_points_array, input_labels_array, ortho_width)
                     if len(pen_points_array):
                         mask = pen_process(pen_points_array, mask)
                     save_mask(mask)
@@ -132,31 +141,28 @@ if __name__ == '__main__':
                     cover = recv_msg(connection)
                     terrain_folder_path = recv_msg(connection)
                     lod = recv_msg(connection)
-                    bottom_left_and_top_right = recv_msg(connection).split(" ")
+                    bottom_left = recv_msg(connection).split(" ")
                     offset = recv_msg(connection).split(" ")
-                    offset[0] = int(offset[0])
-                    offset[1] = int(offset[1])
+                    orthowidth_and_tilesize = recv_msg(connection).split(" ")
                     array = analyse_mask(mask.tolist())
-                    modify_tiles(array, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover)
+                    modify_tiles(array, terrain_folder_path, lod, bottom_left, offset, orthowidth_and_tilesize, connection, cover)
                     content = "ModifyDone"
                 elif data == "ModifyWithoutRecursive":
                     cover = recv_msg(connection)
                     terrain_folder_path = recv_msg(connection)
                     lod = recv_msg(connection)
-                    bottom_left_and_top_right = recv_msg(connection).split(" ")
+                    bottom_left = recv_msg(connection).split(" ")
                     offset = recv_msg(connection).split(" ")
-                    offset[0] = int(offset[0])
-                    offset[1] = int(offset[1])
+                    orthowidth_and_tilesize = recv_msg(connection).split(" ")
                     array = analyse_mask(mask.tolist())
-                    modify_without_recursive(array, terrain_folder_path, lod, bottom_left_and_top_right, offset,
-                                             connection, cover)
+                    modify_without_recursive(array, terrain_folder_path, lod, bottom_left, offset, orthowidth_and_tilesize, connection, cover)
                     content = "ModifyDone"
                 elif data == "ExportDone":
                     image = get_image()
                     content = "SetImageDone"
                 elif data == "Clear":
                     image = None
-                    mask = np.zeros(shape=(256, 256), dtype=bool)
+                    mask = np.zeros(shape=(ortho_width,ortho_width), dtype=bool)
                     input_points = []
                     input_labels = []
                     pen_points = []

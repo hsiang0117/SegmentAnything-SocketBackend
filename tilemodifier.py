@@ -76,170 +76,67 @@ def read_watermask(file_path, pos):
 # Get watermask bytearray that will be written back to the terrain file.
 # This bytearray obtains by originate watermask from the terrain file and the segment result through an algorithm
 # which considers the relative position of target tile and the area covered by segment result.
-def get_new_watermask(file_path, mask, corner, offset, cover):
+def get_new_watermask(file_path, mask, i, j, ortho_width, tile_size, offset, cover):
     pos = get_watermask_pos(file_path)
     new_mask = b''
     if pos == -1:
-        if corner == 0:
-            for i in range(0, 256):
-                for j in range(0, 256):
-                    if j >= offset[0] and i <= (255 - offset[1]):
-                        new_mask += mask[i + offset[1]][j - offset[0]]
+        for x in range(0, tile_size):
+            for y in range(0, tile_size):
+                if offset[1] <= x + i * tile_size <= offset[1] + ortho_width:
+                    if offset[0] <= y + j * tile_size <= offset[0] + ortho_width:
+                        new_mask += mask[x + i * tile_size - offset[1] - 1][y + j * tile_size - offset[0] - 1]
                     else:
                         new_mask += b'\x00'
-        elif corner == 1:
-            for i in range(0, 256):
-                for j in range(0, 256):
-                    if j <= offset[0] and i <= (255 - offset[1]):
-                        new_mask += mask[i + offset[1]][j + 255 - offset[0]]
-                    else:
-                        new_mask += b'\x00'
-        elif corner == 2:
-            for i in range(0, 256):
-                for j in range(0, 256):
-                    if j >= offset[0] and i >= (255 - offset[1]):
-                        new_mask += mask[i + offset[1] - 255][j - offset[0]]
-                    else:
-                        new_mask += b'\x00'
-        elif corner == 3:
-            for i in range(0, 256):
-                for j in range(0, 256):
-                    if j <= offset[0] and i >= (255 - offset[1]):
-                        new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
-                    else:
-                        new_mask += b'\x00'
+                else:
+                    new_mask += b'\x00'
     else:
         origin_length, origin_mask = read_watermask(file_path, pos)
         if origin_length == 1:
-            if corner == 0:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j >= offset[0] and i <= (255 - offset[1]):
+            for x in range(0, tile_size):
+                for y in range(0, tile_size):
+                    if offset[1] <= x + i * tile_size <= offset[1] + ortho_width:
+                        if offset[0] <= y + j * tile_size <= offset[0] + ortho_width:
                             if cover == "Fill":
-                                if mask[i + offset[1]][j - offset[0]] != b'\x00':
-                                    new_mask+=mask[i + offset[1]][j - offset[0]]
+                                if mask[x + i * tile_size - offset[1]][
+                                    y + j * tile_size - offset[0]] != b'\x00':
+                                    new_mask += mask[x + i * tile_size - offset[1]][
+                                        y + j * tile_size - offset[0]]
                                 else:
                                     if origin_mask == 0:
                                         new_mask += b'\x00'
                                     else:
                                         new_mask += b'\xff'
                             else:
-                                new_mask += mask[i + offset[1]][j - offset[0]]
+                                new_mask += mask[x + i * tile_size - offset[1] - 1][
+                                    y + j * tile_size - offset[0] - 1]
                         else:
                             if origin_mask == 0:
                                 new_mask += b'\x00'
                             else:
                                 new_mask += b'\xff'
-            elif corner == 1:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j <= offset[0] and i <= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1]][j + 255 - offset[0]] != b'\x00':
-                                    new_mask+=mask[i + offset[1]][j + 255 - offset[0]]
-                                else:
-                                    if origin_mask == 0:
-                                        new_mask += b'\x00'
-                                    else:
-                                        new_mask += b'\xff'
-                            else:
-                                new_mask += mask[i + offset[1]][j + 255 - offset[0]]
+                    else:
+                        if origin_mask == 0:
+                            new_mask += b'\x00'
                         else:
-                            if origin_mask == 0:
-                                new_mask += b'\x00'
-                            else:
-                                new_mask += b'\xff'
-            elif corner == 2:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j >= offset[0] and i >= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1] - 255][j - offset[0]] != b'\x00':
-                                    new_mask+=mask[i + offset[1] - 255][j - offset[0]]
-                                else:
-                                    if origin_mask == 0:
-                                        new_mask += b'\x00'
-                                    else:
-                                        new_mask += b'\xff'
-                            else:
-                                new_mask += mask[i + offset[1] - 255][j - offset[0]]
-                        else:
-                            if origin_mask == 0:
-                                new_mask += b'\x00'
-                            else:
-                                new_mask += b'\xff'
-            elif corner == 3:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j <= offset[0] and i >= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1] - 255][j + 255 - offset[0]] != b'\x00':
-                                    new_mask+=mask[i + offset[1] - 255][j + 255 - offset[0]]
-                                else:
-                                    if origin_mask == 0:
-                                        new_mask += b'\x00'
-                                    else:
-                                        new_mask += b'\xff'
-                            else:
-                                new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
-                        else:
-                            if origin_mask == 0:
-                                new_mask += b'\x00'
-                            else:
-                                new_mask += b'\xff'
+                            new_mask += b'\xff'
         else:
-            if corner == 0:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j >= offset[0] and i <= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1]][j - offset[0]] != b'\x00':
-                                    new_mask += mask[i + offset[1]][j - offset[0]]
-                                else:
-                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
+            for x in range(0, tile_size):
+                for y in range(0, tile_size):
+                    if offset[1] <= x + i * tile_size <= offset[1] + ortho_width and offset[0] <= y + j * tile_size <= \
+                            offset[0] + ortho_width:
+                        if cover == "Fill":
+                            if mask[x + i * tile_size - offset[1] - 1][
+                                y + j * tile_size - offset[0] - 1] != b'\x00':
+                                new_mask += mask[x + i * tile_size - offset[1] - 1][
+                                    y + j * tile_size - offset[0] - 1]
                             else:
-                                new_mask += mask[i + offset[1]][j - offset[0]]
+                                new_mask += struct.pack(unsigned_char_format, origin_mask[x * tile_size + y])
                         else:
-                            new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-            elif corner == 1:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j <= offset[0] and i <= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1]][j + 255 - offset[0]] != b'\x00':
-                                    new_mask += mask[i + offset[1]][j + 255 - offset[0]]
-                                else:
-                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-                            else:
-                                new_mask += mask[i + offset[1]][j + 255 - offset[0]]
-                        else:
-                            new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-            elif corner == 2:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j >= offset[0] and i >= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1] - 255][j - offset[0]] != b'\x00':
-                                    new_mask += mask[i + offset[1] - 255][j - offset[0]]
-                                else:
-                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-                            else:
-                                new_mask += mask[i + offset[1] - 255][j - offset[0]]
-                        else:
-                            new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-            elif corner == 3:
-                for i in range(0, 256):
-                    for j in range(0, 256):
-                        if j <= offset[0] and i >= (255 - offset[1]):
-                            if cover == "Fill":
-                                if mask[i + offset[1] - 255][j + 255 - offset[0]] != b'\x00':
-                                    new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
-                                else:
-                                    new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
-                            else:
-                                new_mask += mask[i + offset[1] - 255][j + 255 - offset[0]]
-                        else:
-                            new_mask += struct.pack(unsigned_char_format, origin_mask[i * 256 + j])
+                            new_mask += mask[x + i * tile_size - offset[1] - 1][
+                                y + j * tile_size - offset[0] - 1]
+                    else:
+                        new_mask += struct.pack(unsigned_char_format, origin_mask[x * tile_size + y])
+
     return new_mask
 
 
@@ -354,8 +251,8 @@ def write_back(file_path, new_mask):
 
 # Modify watermask within a single tile with the new mask which come from get_watermask().
 # If there's no watermask (input pos = -1) then add watermask to the terrain file.
-def modify_watermask(file_path, mask, corner, offset, cover):
-    new_mask = get_new_watermask(file_path, mask, corner, offset, cover)
+def modify_watermask(file_path, mask, i, j, ortho_width, tile_size, offset, cover):
+    new_mask = get_new_watermask(file_path, mask, i, j, ortho_width, tile_size, offset, cover)
     write_back(file_path, new_mask)
 
 
@@ -400,26 +297,6 @@ def recursive_downward_modify(terrain_folder_path, lod, X, Y):
                 recursive_downward_modify(terrain_folder_path, lod + 1, X * 2 + j, Y * 2 + i)
 
 
-class multi_thread(threading.Thread):
-    def __init__(self, mask, terrain_folder_path, lod, X, Y, offset, corner, cover):
-        threading.Thread.__init__(self)
-        self.mask = mask
-        self.terrain_folder_path = terrain_folder_path
-        self.lod = lod
-        self.X = X
-        self.Y = Y
-        self.offset = offset
-        self.corner = corner
-        self.cover = cover
-
-    def run(self):
-        file_path = self.terrain_folder_path + self.lod + "\\" + self.X + "\\" + self.Y + ".terrain"
-        if os.path.exists(file_path):
-            modify_watermask(file_path, self.mask, self.corner, self.offset, self.cover)
-            recursive_downward_modify(self.terrain_folder_path, int(self.lod), int(self.X), int(self.Y))
-        print("thread-" + str(self.corner) + " down")
-
-
 should_send = False
 
 
@@ -431,58 +308,56 @@ def send_num_modified(connection):
 
 
 # Modify tiles that are covered by the segment result.
-def modify_tiles(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover):
-    thread0 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[0], bottom_left_and_top_right[1],
-                           offset, 0,cover)
-    thread1 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[2], bottom_left_and_top_right[1],
-                           offset, 1,cover)
-    thread2 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[0], bottom_left_and_top_right[3],
-                           offset, 2,cover)
-    thread3 = multi_thread(mask, terrain_folder_path, lod, bottom_left_and_top_right[2], bottom_left_and_top_right[3],
-                           offset, 3,cover)
-    timer = threading.Timer(0.5, send_num_modified, args=(connection,))
+def modify_tiles(mask, terrain_folder_path, lod, bottom_left, offset, orthowidth_and_tilesize, connection, cover):
+    StartX = int(bottom_left[0])
+    StartY = int(bottom_left[1])
+    offset[0] = int(offset[0])
+    offset[1] = int(offset[1])
+    ortho_width = int(orthowidth_and_tilesize[0])
+    tile_size = int(orthowidth_and_tilesize[1])
+    viewport_scale = int(ortho_width / tile_size)
 
-    thread0.start()
-    thread1.start()
-    thread2.start()
-    thread3.start()
+    timer = threading.Timer(0.5, send_num_modified, args=(connection,))
     global should_send
     should_send = True
     timer.start()
 
-    thread0.join()
-    thread1.join()
-    thread2.join()
-    thread3.join()
-    should_send = False
+    for i in range(0, viewport_scale + 1):
+        for j in range(0, viewport_scale + 1):
+            file_path = terrain_folder_path + lod + "\\" + str(StartX + j) + "\\" + str(
+                StartY + viewport_scale - i) + ".terrain"
+            if os.path.exists(file_path):
+                modify_watermask(file_path, mask, i, j, ortho_width, tile_size, offset, cover)
+                recursive_downward_modify(terrain_folder_path, int(lod), int(StartX + j),
+                                          int(StartY + viewport_scale - i))
 
+    should_send = False
     global num_modified
     num_modified = 0
     print("modify finished")
 
 
-def modify_without_recursive(mask, terrain_folder_path, lod, bottom_left_and_top_right, offset, connection, cover):
-    file_path0 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[0] + "\\" + bottom_left_and_top_right[
-        1] + ".terrain"
-    file_path1 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[2] + "\\" + bottom_left_and_top_right[
-        1] + ".terrain"
-    file_path2 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[0] + "\\" + bottom_left_and_top_right[
-        3] + ".terrain"
-    file_path3 = terrain_folder_path + lod + "\\" + bottom_left_and_top_right[2] + "\\" + bottom_left_and_top_right[
-        3] + ".terrain"
+def modify_without_recursive(mask, terrain_folder_path, lod, bottom_left, offset, orthowidth_and_tilesize, connection,
+                             cover):
+    StartX = int(bottom_left[0])
+    StartY = int(bottom_left[1])
+    offset[0] = int(offset[0])
+    offset[1] = int(offset[1])
+    ortho_width = int(orthowidth_and_tilesize[0])
+    tile_size = int(orthowidth_and_tilesize[1])
+    viewport_scale = int(ortho_width / tile_size)
+
     timer = threading.Timer(0.5, send_num_modified, args=(connection,))
     global should_send
     should_send = True
     timer.start()
 
-    if (os.path.exists(file_path0)):
-        modify_watermask(file_path0, mask, 0, offset, cover)
-    if (os.path.exists(file_path1)):
-        modify_watermask(file_path1, mask, 1, offset, cover)
-    if (os.path.exists(file_path2)):
-        modify_watermask(file_path2, mask, 2, offset, cover)
-    if (os.path.exists(file_path3)):
-        modify_watermask(file_path3, mask, 3, offset, cover)
+    for i in range(0, viewport_scale + 1):
+        for j in range(0, viewport_scale + 1):
+            file_path = terrain_folder_path + lod + "\\" + str(StartX + j) + "\\" + str(
+                StartY + viewport_scale - i) + ".terrain"
+            if os.path.exists(file_path):
+                modify_watermask(file_path, mask, i, j, ortho_width, tile_size, offset, cover)
 
     should_send = False
     global num_modified
